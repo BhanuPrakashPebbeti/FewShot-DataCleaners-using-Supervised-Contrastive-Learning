@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import cv2
 import random
@@ -6,19 +5,19 @@ import matplotlib.pyplot as plt
 import os
 from PIL import Image
 import pickle
-from torch.utils.data import DataLoader, Dataset
 from random import shuffle
 import albumentations as A
 import torch
-import pandas as pd
+torch.__version__
 from torch import nn
+from sklearn.model_selection import train_test_split
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch.nn.functional as F
 from torchvision.datasets import STL10
 import torchvision.transforms.functional as tvf
 from torchvision import transforms
-import numpy as np
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler, SequentialSampler
-import random
 from PIL import Image
 from torch.multiprocessing import cpu_count
 from torch.optim import RMSprop
@@ -26,82 +25,15 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from argparse import Namespace
+import xml.etree.ElementTree as ET      
 
-# img_dirs = []
-# labels_temp = []
-# files_cervix = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Datasets/Cervix Cancer/train/train")
-# files_cervix = sorted(files_cervix)
-# for i in files_cervix[1:]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Datasets/Cervix Cancer/train/train/"+ str(i)
-#     sub = os.listdir(path)
-#     sub = sorted(sub)
-#     for j in sub[1:]:
-#         sub_path = path + "/" + str(j)
-#         img_dirs.append(sub_path)
-#         labels_temp.append(0)
-        
-# print("Length of Cervical images:",len(img_dirs))
-
-# files_noise = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Imagenet/train")
-# files_noise = sorted(files_noise)
-# for k in files_noise[:20000]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Imagenet/train/" + str(k)
-#     img = Image.open(path)
-#     t2 = transforms.ToTensor()(img)
-#     if t2.shape[0] == 3:
-#         img_dirs.append(path)
-#         labels_temp.append(1)  
-        
-# blood_noise = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Blood_images/train")
-# blood_noise = sorted(blood_noise)
-# for l in blood_noise[1:]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Blood_images/train/" + str(l)
-#     img = Image.open(path)
-#     t2 = transforms.ToTensor()(img)
-#     if t2.shape[0] == 3:
-#         img_dirs.append(path)
-#         labels_temp.append(1)   
-        
-# eye_noise = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/eye_dataset")
-# eye_noise = sorted(eye_noise)
-# for m in eye_noise[1000:]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/eye_dataset/" + str(m)
-#     img = Image.open(path)
-#     t2 = transforms.ToTensor()(img)
-#     if t2.shape[0] == 3:
-#         img_dirs.append(path)
-#         labels_temp.append(1)  
-        
-# skin_noise = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/skin_cancer")
-# skin_noise = sorted(skin_noise)
-# for n in skin_noise[1000:]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/skin_cancer/" + str(n)
-#     img = Image.open(path)
-#     t2 = transforms.ToTensor()(img)
-#     if t2.shape[0] == 3:
-#         img_dirs.append(path)
-#         labels_temp.append(1)  
-
-# surgery_noise = os.listdir("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Surgery_frames")
-# surgery_noise = sorted(surgery_noise)
-# for o in surgery_noise[2000:]:
-#     path = "/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Surgery_frames/" + str(o)
-#     img = Image.open(path)
-#     t2 = transforms.ToTensor()(img)
-#     if t2.shape[0] == 3:
-#         img_dirs.append(path)
-#         labels_temp.append(1)        
-  
-train_df = pd.read_csv("/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/TESTING_ON_5DATASETS/training_data.csv")
-img_dirs = list(train_df["Path"])
-labels_temp = list(train_df["Noise"])
-
-data_temp = img_dirs
-print("Length of total data :", len(data_temp))
-
-temp = list(zip(data_temp, labels_temp))
-random.shuffle(temp)
-data, labels = zip(*temp)
+train_df = pd.read_csv("/workstation/raid/home/p170059cs/bijoy_backup/data_from_b170007ec/Programs/Bhanu/CERVICAL2.0/Dataset/Dataset1.csv")
+img_dirs = list(train_df["path"])
+labels = list(train_df["id"])
+data,val_X,labels,val_Y = train_test_split(img_dirs,labels, test_size=0.1, random_state=42,shuffle = True,stratify = labels)
+data.extend(val_X)
+labels.extend(val_Y)
+print("Length of total data :", len(data))
 
 class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
@@ -190,8 +122,6 @@ class SupConLoss(nn.Module):
         loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
-
-    
 
 def random_rotate(image):
     if random.random() > 0.5:
@@ -324,9 +254,8 @@ class ImageEmbedding(nn.Module):
 
 class ImageEmbeddingModule(pl.LightningModule):
     def __init__(self, hparams):
-        hparams = Namespace(**hparams) if isinstance(hparams, dict) else hparams
         super().__init__()
-        #self.hparams = hparams
+        self.hparams.update(vars(hparams))
         self.model = ImageEmbedding()
         self.loss = SupConLoss()
     
@@ -393,27 +322,28 @@ class ImageEmbeddingModule(pl.LightningModule):
        }
 
 hparams = Namespace(
-    lr=0.0001,
-    epochs=500,
-    batch_size=22,
-    train_size=33396,
-    validation_size=3708
+    lr=0.001,
+    epochs=200,
+    batch_size=47,
+    train_size=1198586,
+    validation_size=133198
 )
 
 checkpoint_callback = ModelCheckpoint(
-    dirpath="/workstation/home/bijoy/data_from_b170007ec/Programs/Bhanu/SCLEARNING/Checkpoints", 
+    dirpath="/workstation/raid/home/p170059cs/bijoy_backup/data_from_b170007ec/Programs/Bhanu/CERVICAL2.0/Checkpoints", 
     filename="model", 
     monitor='val_loss',
     verbose=True, 
     save_top_k=1,
     mode='min'
 )
-early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.0, patience=18, verbose=1, mode='min')
+early_stop_callback = EarlyStopping(monitor='val_loss', min_delta=0.0, patience=10, verbose=1, mode='min')
 module = ImageEmbeddingModule(hparams)
-trainer = pl.Trainer(gpus = [1],
-                     accumulate_grad_batches=1518,
+trainer = pl.Trainer(gpus = 2,
+                     accumulate_grad_batches=1024,
                      max_epochs=hparams.epochs,
                      replace_sampler_ddp = False,
+                     strategy="dp",
                     callbacks=[checkpoint_callback,early_stop_callback],
                     progress_bar_refresh_rate=20)
 
